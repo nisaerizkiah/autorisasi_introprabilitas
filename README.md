@@ -54,7 +54,7 @@
    <img width="1920" height="1200" alt="Screenshot 2025-11-26 151747" src="https://github.com/user-attachments/assets/2b5462ae-a1d2-40a9-94c1-0ca1a758b764" />
 
  - LOGIN USER
-  <img width="1920" height="1200" alt="Screenshot 2025-11-26 151804" src="https://github.com/user-attachments/assets/9b026459-357a-40f6-ab4e-5ce24128a9c6" />
+   <img width="1920" height="1200" alt="Screenshot 2025-11-26 151804" src="https://github.com/user-attachments/assets/9b026459-357a-40f6-ab4e-5ce24128a9c6" />
   
  - POST DIRECTOR DENGAN MENGGUNAKAN TOKEN USER
    <img width="1920" height="1200" alt="Screenshot 2025-11-26 151847" src="https://github.com/user-attachments/assets/19220638-d1ae-4b84-a902-d2b610a269b9" />
