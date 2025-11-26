@@ -32,6 +32,7 @@ const dbMovies = new sqlite3.Database(process.env.DB_MOVIES || "movies.db", (err
   }
 });
 
+
 // Koneksi ke database Directors
 const dbDirectors = new sqlite3.Database(process.env.DB_DIRECTORS || "directors.db", (err) => {
   if (err) {
@@ -39,6 +40,7 @@ const dbDirectors = new sqlite3.Database(process.env.DB_DIRECTORS || "directors.
   } else {
     console.log("Terhubung ke DB Directors");
 
+    // table directors
     dbDirectors.run(
       `CREATE TABLE IF NOT EXISTS directors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,15 +62,26 @@ const dbDirectors = new sqlite3.Database(process.env.DB_DIRECTORS || "directors.
       }
     );
 
-    // Tambahkan juga tabel users di database directors agar autentikasi bisa di sana
+    //  membuat table user dg role
     dbDirectors.run(
       `CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL UNIQUE,
-        password TEXT NOT NULL
-      )`
+        password TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user'
+      )`,
+      (err) => {
+        if (err) {
+          console.error("Gagal membuat tabel users:", err.message);
+        }
+        
+      }
     );
   }
 });
 
+
 module.exports = { dbMovies, dbDirectors };
+
+
+database.js

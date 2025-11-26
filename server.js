@@ -1,4 +1,3 @@
-// ===================== IMPORT DAN KONFIG =====================
 require("dotenv").config();
 const express = require("express");
 const bodyParser = require("body-parser");
@@ -13,146 +12,171 @@ const JWT_SECRET = process.env.JWT_SECRET || "rahasia";
 // Middleware untuk parsing JSON body
 app.use(bodyParser.json());
 
-// ===================== MIDDLEWARE AUTENTIKASI JWT =====================
+// middleware authentikasi
 function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // Format: "Bearer <token>"
+  const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) return res.status(401).json({ message: "Token tidak ditemukan" });
 
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) return res.status(403).json({ message: "Token tidak valid" });
-    req.user = decoded;
+
+    req.user = decoded.user;
     next();
   });
 }
 
-// ===================== REGISTER USER =====================
-app.post("/register", (req, res) => {
+// middleware autorisasi role
+function authorizeRole(role) {
+  return (req, res, next) => {
+    if (req.user && req.user.role === role) {
+      next();
+    } else {
+      return res.status(403).json({ message: "Akses ditolak: Role tidak sesuai" });
+    }
+  };
+}
+
+// endpoint registrasi user default
+app.post("/auth/register", (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password)
-    return res
-      .status(400)
-      .json({ message: "Username dan password wajib diisi" });
+    return res.status(400).json({ message: "Username dan password wajib diisi" });
 
   const hashedPassword = bcrypt.hashSync(password, 10);
-  const sql = "INSERT INTO users (username, password) VALUES (?, ?)";
 
-  dbDirectors.run(sql, [username, hashedPassword], function (err) {
+  const sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+  const params = [username.toLowerCase(), hashedPassword, "user"];
+
+  dbDirectors.run(sql, params, function (err) {
     if (err) {
       if (err.message.includes("UNIQUE"))
-        return res.status(409).json({ message: "Username sudah digunakan" });
-      return res
-        .status(500)
-        .json({ message: "Gagal register", error: err.message });
+        return res.status(409).json({ error: "Username sudah digunakan" });
+
+      return res.status(500).json({ error: err.message });
     }
-    res.json({ message: "Registrasi berhasil", id: this.lastID });
+
+    res.status(201).json({ message: "Registrasi berhasil", userId: this.lastID });
   });
 });
 
-// ===================== LOGIN USER =====================
-app.post("/login", (req, res) => {
+// endpoint registrasi admin
+app.post("/auth/register-admin", (req, res) => {
+  const { username, password } = req.body;
+
+  const hashedPassword = bcrypt.hashSync(password, 10);
+
+  const sql = "INSERT INTO users (username, password, role) VALUES (?, ?, ?)";
+  const params = [username.toLowerCase(), hashedPassword, "admin"];
+
+  dbDirectors.run(sql, params, function (err) {
+    if (err) {
+      if (err.message.includes("UNIQUE")) {
+        return res.status(409).json({ error: "Username admin sudah ada" });
+      }
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.status(201).json({ message: "Admin berhasil dibuat", userId: this.lastID });
+  });
+});
+
+// endpoint login sesuai role
+app.post("/auth/login", (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password)
-    return res
-      .status(400)
-      .json({ message: "Username dan password wajib diisi" });
+    return res.status(400).json({ message: "Username dan password wajib diisi" });
 
   const sql = "SELECT * FROM users WHERE username = ?";
-  dbDirectors.get(sql, [username], (err, user) => {
-    if (err)
-      return res.status(500).json({ message: "Terjadi kesalahan server" });
+  dbDirectors.get(sql, [username.toLowerCase()], (err, user) => {
+    if (err) return res.status(500).json({ message: "Terjadi kesalahan server" });
     if (!user) return res.status(404).json({ message: "User tidak ditemukan" });
 
     const validPassword = bcrypt.compareSync(password, user.password);
     if (!validPassword)
       return res.status(401).json({ message: "Password salah" });
 
-    const token = jwt.sign(
-      { username: user.username },
-      JWT_SECRET,
-      { expiresIn: "1h" } // Token berlaku 1 jam
-    );
+    const payload = {
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
+    };
 
-    res.json({ message: "Login berhasil", token });
+    jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" }, (err, token) => {
+      res.json({ message: "Login berhasil", token: token });
+    });
   });
 });
 
-// ===================== GET SEMUA DIRECTORS (PUBLIK) =====================
+
+// directors
+
+// GET Directors (public)
 app.get("/directors", (req, res) => {
   const sql = "SELECT * FROM directors ORDER BY id ASC";
   dbDirectors.all(sql, [], (err, rows) => {
-    if (err)
-      return res.status(500).json({ message: "Gagal mengambil data", error: err.message });
-    res.json({ message: "success", data: rows });
+    if (err) return res.status(500).json({ message: "Gagal mengambil data" });
+    res.json({ data: rows });
   });
 });
 
-// ===================== GET DIRECTOR BY ID (PUBLIK) =====================
+// GET by ID (public)
 app.get("/directors/:id", (req, res) => {
   const sql = "SELECT * FROM directors WHERE id = ?";
   dbDirectors.get(sql, [req.params.id], (err, row) => {
-    if (err)
-      return res.status(500).json({ message: "Gagal mengambil data", error: err.message });
-    if (!row) return res.status(404).json({ message: "Data tidak ditemukan" });
-    res.json({ message: "success", data: row });
+    if (!row) return res.status(404).json({ message: "Tidak ditemukan" });
+    res.json({ data: row });
   });
 });
 
-// ===================== POST TAMBAH DIRECTOR (DENGAN TOKEN) =====================
+// POST Directors (User & Admin)
 app.post("/directors", authenticateToken, (req, res) => {
   const { name, country } = req.body;
-  if (!name || !country)
-    return res.status(400).json({ message: "Nama dan negara wajib diisi" });
-
   const sql = "INSERT INTO directors (name, country) VALUES (?, ?)";
+
   dbDirectors.run(sql, [name, country], function (err) {
-    if (err)
-      return res.status(500).json({ message: "Gagal menambah data", error: err.message });
-    res.json({ message: "Director berhasil ditambah", id: this.lastID });
+    if (err) return res.status(500).json({ message: "Gagal menambah data" });
+    res.json({ message: "Data ditambahkan", id: this.lastID });
   });
 });
 
-// ===================== PUT UBAH DIRECTOR (DENGAN TOKEN) =====================
-app.put("/directors/:id", authenticateToken, (req, res) => {
+// PUT (Admin only)
+app.put("/directors/:id", [authenticateToken, authorizeRole("admin")], (req, res) => {
   const { name, country } = req.body;
-  if (!name || !country)
-    return res.status(400).json({ message: "Nama dan negara wajib diisi" });
-
   const sql = "UPDATE directors SET name = ?, country = ? WHERE id = ?";
+
   dbDirectors.run(sql, [name, country, req.params.id], function (err) {
-    if (err)
-      return res.status(500).json({ message: "Gagal mengubah data", error: err.message });
-    if (this.changes === 0)
-      return res.status(404).json({ message: "Data tidak ditemukan" });
-    res.json({ message: "Director berhasil diperbarui" });
+    if (this.changes === 0) return res.status(404).json({ message: "Tidak ditemukan" });
+    res.json({ message: "Data diperbarui" });
   });
 });
 
-// ===================== DELETE DIRECTOR (DENGAN TOKEN) =====================
-app.delete("/directors/:id", authenticateToken, (req, res) => {
+// DELETE (Admin only)
+app.delete("/directors/:id", [authenticateToken, authorizeRole("admin")], (req, res) => {
   const sql = "DELETE FROM directors WHERE id = ?";
+
   dbDirectors.run(sql, [req.params.id], function (err) {
-    if (err)
-      return res.status(500).json({ message: "Gagal menghapus data", error: err.message });
-    if (this.changes === 0)
-      return res.status(404).json({ message: "Data tidak ditemukan" });
-    res.json({ message: "Director berhasil dihapus" });
+    if (this.changes === 0) return res.status(404).json({ message: "Tidak ditemukan" });
+    res.json({ message: "Data dihapus" });
   });
 });
 
-// ===================== STATUS SERVER =====================
+
+// endpoint status
 app.get("/status", (req, res) => {
   res.json({
     ok: true,
     status: "Server is running",
-    service: "Directors API (JWT Protected)",
+    service: "Directors API (JWT + RBAC)",
   });
 });
 
-// ===================== JALANKAN SERVER =====================
+// jalankan server
 app.listen(PORT, () => {
   console.log(`Server berjalan di http://localhost:${PORT}`);
 });

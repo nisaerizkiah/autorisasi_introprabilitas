@@ -1,22 +1,41 @@
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// Middleware Autentikasi (yang sudah ada)
 function authenticateToken(req, res, next) {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-    if (!token) {
-        return res.status(401).json({ error: 'Token tidak ditemukan' });
+  if (token == null) {
+    return res.status(401).json({ error: 'Token tidak ditemukan' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, decodedPayload) => {
+    if (err) {
+      return res.status(403).json({ error: 'Token tidak valid' });
     }
 
-    jwt.verify(token, JWT_SECRET, (err, decodedPayload) => {
-        if (err) {
-            console.error('JWT verification error:', err.message);
-            return res.status(403).json({ error: 'Token tidak valid' }); // Jika token tidak valid, kirim 403
-        }
-        req.user = decodedPayload.user;
-        next();
-    });
+    req.user = decodedPayload.user; 
+    next();
+  });
 }
 
-module.exports = authenticateToken; // Simpan payload yang sudah didecode ke req.user
+
+// Middleware Autorisasi (baru)
+function authorizeRole(role) {
+  return (req, res, next) => {
+    // Middleware ini harus dijalankan stlh authenticateToken
+    if (req.user && req.user.role === role) {
+      next(); // Bila peran cocok, lanjutkan
+    } else {
+      // Untuk pengguna terautentikasi, tetapi tidak memiliki izin
+      return res.status(403).json({ error: 'Akses Dilarang: Peran tidak memadai' });
+    }
+  };
+}
+
+
+module.exports = {
+  authenticateToken,
+  authorizeRole
+};
